@@ -26,10 +26,34 @@ _MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
 mcp = FastMCP(
     "Contoso Travel",
     instructions=(
-        "Contoso Travel provides read-only information about daily flights and hotels for "
-        "10 destinations worldwide. Use the tools to look up cities, search flights between "
-        "destinations, and find hotels in a city. This server does NOT handle bookings or "
-        "payments - it is for information only."
+        "Contoso Travel is a fictional airline + hotel provider used for demos.\n"
+        "It serves 10 cities with one daily flight in each direction between every "
+        "city pair (90 flights total) and lists 10 partner hotels per city (100 "
+        "hotels total).\n"
+        "\n"
+        "Destinations (IATA - city, country, timezone):\n"
+        "  AMS - Amsterdam, Netherlands (Europe/Amsterdam)\n"
+        "  BER - Berlin, Germany (Europe/Berlin)\n"
+        "  BLR - Bengaluru, India (Asia/Kolkata)\n"
+        "  EBB - Entebbe, Uganda (Africa/Kampala)\n"
+        "  GIG - Rio de Janeiro, Brazil (America/Sao_Paulo)\n"
+        "  HKG - Hong Kong, Hong Kong SAR (Asia/Hong_Kong)\n"
+        "  HND - Tokyo, Japan (Asia/Tokyo)\n"
+        "  JFK - New York, United States (America/New_York)\n"
+        "  NBO - Nairobi, Kenya (Africa/Nairobi)\n"
+        "  SFO - San Francisco, United States (America/Los_Angeles)\n"
+        "\n"
+        "Conventions:\n"
+        "  - Flight numbers are 'CT001'..'CT090' (uppercase, case-insensitive on input).\n"
+        "  - Hotel ids are '<IATA>-NN', e.g. 'HKG-03'.\n"
+        "  - Flight times are LOCAL to each airport. `arrival_day_offset` is -1, 0, "
+        "or +1 days relative to departure.\n"
+        "  - All prices (flight `price_usd`, hotel `daily_rate_usd`) are indicative "
+        "demo values in USD, NOT live fares.\n"
+        "\n"
+        "Scope: this server is INFORMATION ONLY. It does not handle bookings, "
+        "payments, seat selection, availability, baggage policies, loyalty programs, "
+        "or real-time disruptions. If a user asks for those, say so plainly."
     ),
     host=_MCP_HOST,
     port=_MCP_PORT,
@@ -74,7 +98,11 @@ def _enrich_city(c: City) -> CityInfo:
 
 @mcp.tool()
 def list_cities() -> list[City]:
-    """List all 10 destinations served by Contoso Travel."""
+    """List all 10 destinations served by Contoso Travel.
+
+    Returns the cities sorted alphabetically by name. The list is small and
+    static for the lifetime of the conversation; no need to call repeatedly.
+    """
     return storage.list_cities()
 
 
@@ -82,8 +110,9 @@ def list_cities() -> list[City]:
 def get_city_info(query: str) -> CityInfo | None:
     """Resolve a city by IATA code (e.g. 'AMS') or name (e.g. 'Amsterdam').
 
-    Returns the city's IATA code, country, timezone, coordinates and the
-    current local time at the destination. Returns null if the city is unknown.
+    Matching is case-insensitive. Returns the city's IATA code, country,
+    timezone, coordinates and the current local time at the destination.
+    Returns null if the city is not part of Contoso Travel's 10-city network.
     """
     c = storage.get_city(query)
     return _enrich_city(c) if c else None
@@ -98,13 +127,17 @@ def search_flights(
     """Search Contoso Travel's daily flight schedule.
 
     Args:
-        origin: Optional origin IATA code (e.g. 'JFK').
-        destination: Optional destination IATA code (e.g. 'HND').
+        origin: Optional origin IATA code (e.g. 'JFK'). Case-insensitive.
+        destination: Optional destination IATA code (e.g. 'HND'). Case-insensitive.
         max_duration_minutes: Optional cap on flight duration in minutes.
 
-    All flights operate daily. Times are local to the origin / destination
-    respectively; `arrival_day_offset` indicates if the flight lands the next
-    (+1) or previous (-1) calendar day.
+    All flights operate daily, with exactly ONE flight per directed city pair
+    (so origin+destination yields at most one result). Times are local to the
+    origin / destination respectively; `arrival_day_offset` indicates if the
+    flight lands the next (+1) or previous (-1) calendar day. `price_usd` is
+    an indicative one-way economy fare and is not bookable through this server.
+    Results are sorted by (origin, destination). Calling with no filters returns
+    the full 90-flight network.
     """
     return storage.search_flights(
         origin=origin, destination=destination, max_duration_minutes=max_duration_minutes
@@ -113,7 +146,11 @@ def search_flights(
 
 @mcp.tool()
 def get_flight(flight_number: str) -> Flight | None:
-    """Look up a single flight by its Contoso flight number (e.g. 'CT042')."""
+    """Look up a single flight by its Contoso flight number.
+
+    Flight numbers are 'CT001' through 'CT090' (case-insensitive). Returns null
+    if the number is outside that range or otherwise unknown.
+    """
     return storage.get_flight(flight_number)
 
 
@@ -126,16 +163,27 @@ def search_hotels(
     """List hotels in a given Contoso Travel city.
 
     Args:
-        city: City IATA code (e.g. 'HKG'). Use list_cities to discover codes.
+        city: City IATA code (e.g. 'HKG') or city name (e.g. 'Hong Kong').
+            Case-insensitive. Use list_cities to discover valid cities.
         min_stars: Optional minimum star rating (1-5).
         max_rate_usd: Optional maximum nightly rate in USD.
+
+    Each city has exactly 10 hotels. Results are sorted by stars descending,
+    then by daily rate ascending. `daily_rate_usd` is indicative demo data.
+    Returns an empty list if the city is unknown or no hotel matches the filters.
     """
-    return storage.search_hotels(city=city, min_stars=min_stars, max_rate_usd=max_rate_usd)
+    resolved = storage.get_city(city)
+    iata = resolved.iata if resolved else city
+    return storage.search_hotels(city=iata, min_stars=min_stars, max_rate_usd=max_rate_usd)
 
 
 @mcp.tool()
 def get_hotel(hotel_id: str) -> Hotel | None:
-    """Look up a single hotel by its id (e.g. 'HKG-03')."""
+    """Look up a single hotel by its id.
+
+    Hotel ids follow the pattern '<IATA>-NN', e.g. 'HKG-03', 'JFK-10'
+    (case-insensitive). Returns null if no hotel matches.
+    """
     return storage.get_hotel(hotel_id)
 
 
