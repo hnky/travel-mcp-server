@@ -28,6 +28,7 @@ class Flight(BaseModel):
     duration_minutes: int
     distance_km: int
     aircraft: str
+    price_usd: int = Field(description="Indicative one-way economy fare in USD.")
     frequency: str = Field(default="daily", description="Schedule frequency.")
 
 

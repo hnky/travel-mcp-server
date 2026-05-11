@@ -88,6 +88,11 @@ def generate_flights(cities: tuple[CityDef, ...] = CITIES) -> list[Flight]:
         )
         day_offset = (arr_local.date() - dep_local.date()).days
 
+        # Indicative one-way economy fare: base + distance-based, jittered, rounded to $5.
+        price = 80 + 0.085 * distance
+        price *= rng.uniform(0.9, 1.15)
+        price_usd = int(round(price / 5.0) * 5)
+
         flights.append(
             Flight(
                 flight_number=f"CT{idx:03d}",
@@ -101,6 +106,7 @@ def generate_flights(cities: tuple[CityDef, ...] = CITIES) -> list[Flight]:
                 duration_minutes=duration_min,
                 distance_km=round(distance),
                 aircraft=aircraft,
+                price_usd=price_usd,
                 frequency="daily",
             )
         )

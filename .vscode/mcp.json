@@ -1,8 +1,20 @@
 {
   "servers": {
-    "contoso-travel": {
+    "contoso-travel-sse": {
       "type": "sse",
       "url": "http://127.0.0.1:8000/sse"
+    },
+    "contoso-travel-http": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
+    },
+    "contoso-travel-azure-sse": {
+      "type": "sse",
+      "url": "https://contoso-travel.redisland-77d7cd39.eastus2.azurecontainerapps.io/sse"
+    },
+    "contoso-travel-azure-http": {
+      "type": "http",
+      "url": "https://contoso-travel.redisland-77d7cd39.eastus2.azurecontainerapps.io/mcp"
     }
   }
 }

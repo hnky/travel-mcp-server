@@ -84,6 +84,7 @@ def entity_to_flight(e: dict) -> Flight:
         duration_minutes=int(e["duration_minutes"]),
         distance_km=int(e["distance_km"]),
         aircraft=e["aircraft"],
+        price_usd=int(e.get("price_usd", 0)),
         frequency=e.get("frequency", "daily"),
     )
 
