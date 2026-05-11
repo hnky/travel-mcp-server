@@ -49,6 +49,20 @@ class CityInfo(City):
     )
 
 
+class CurrentTime(BaseModel):
+    timezone: str = Field(description="IANA timezone the time is expressed in.")
+    iso: str = Field(description="Current local time in ISO 8601 with offset.")
+    utc_iso: str = Field(description="Current UTC time in ISO 8601.")
+    weekday: str = Field(description="Day of the week, e.g. 'Monday'.")
+    date: str = Field(description="Local date (YYYY-MM-DD).")
+    time: str = Field(description="Local 24h time (HH:MM:SS).")
+    utc_offset: str = Field(description="Offset from UTC, e.g. '+02:00'.")
+    city: str | None = Field(
+        default=None,
+        description="If resolved from a Contoso Travel city, that city's IATA code.",
+    )
+
+
 def _enrich_city(c: City) -> CityInfo:
     now = datetime.now(ZoneInfo(c.timezone)).replace(microsecond=0)
     return CityInfo(**c.model_dump(), current_local_time=now.isoformat())
@@ -123,6 +137,57 @@ def search_hotels(
 def get_hotel(hotel_id: str) -> Hotel | None:
     """Look up a single hotel by its id (e.g. 'HKG-03')."""
     return storage.get_hotel(hotel_id)
+
+
+@mcp.tool()
+def get_current_time(location: str | None = None) -> CurrentTime:
+    """Return the current time.
+
+    Args:
+        location: Optional. A Contoso Travel city (IATA code like 'AMS' or
+            name like 'Amsterdam') OR an IANA timezone (e.g. 'Europe/Berlin',
+            'Asia/Tokyo'). If omitted, returns the server's UTC time.
+    """
+    from datetime import timezone as _tz
+
+    city_iata: str | None = None
+
+    if not location:
+        tz_name = "UTC"
+        tz: ZoneInfo | _tz = _tz.utc
+    else:
+        # First try resolving against the Contoso Travel city catalog.
+        city = storage.get_city(location)
+        if city is not None:
+            tz_name = city.timezone
+            city_iata = city.iata
+            tz = ZoneInfo(tz_name)
+        else:
+            # Otherwise treat the input as an IANA timezone name.
+            try:
+                tz = ZoneInfo(location)
+                tz_name = location
+            except Exception as exc:
+                raise ValueError(
+                    f"Unknown location '{location}'. Pass a Contoso city "
+                    f"(IATA or name) or an IANA timezone like 'Europe/Berlin'."
+                ) from exc
+
+    now_local = datetime.now(tz).replace(microsecond=0)
+    now_utc = now_local.astimezone(_tz.utc)
+    offset = now_local.strftime("%z") or "+0000"
+    utc_offset = f"{offset[:3]}:{offset[3:]}"
+
+    return CurrentTime(
+        timezone=tz_name,
+        iso=now_local.isoformat(),
+        utc_iso=now_utc.isoformat(),
+        weekday=now_local.strftime("%A"),
+        date=now_local.strftime("%Y-%m-%d"),
+        time=now_local.strftime("%H:%M:%S"),
+        utc_offset=utc_offset,
+        city=city_iata,
+    )
 
 
 # ---------------------------------------------------------------------------
