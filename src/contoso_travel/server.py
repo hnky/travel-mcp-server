@@ -12,12 +12,16 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
 from . import storage
 from .models import City, Flight, Hotel
 
 load_dotenv()
+
+_MCP_HOST = os.environ.get("MCP_HOST", "127.0.0.1")
+_MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
 
 mcp = FastMCP(
     "Contoso Travel",
@@ -27,6 +31,11 @@ mcp = FastMCP(
         "destinations, and find hotels in a city. This server does NOT handle bookings or "
         "payments - it is for information only."
     ),
+    host=_MCP_HOST,
+    port=_MCP_PORT,
+    # Disable DNS-rebinding protection: this server is meant to be reachable
+    # via arbitrary Host headers (Azure Container Apps fronts it with HTTPS).
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
 
@@ -121,13 +130,27 @@ def get_hotel(hotel_id: str) -> Hotel | None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    """Run the MCP server over SSE."""
-    host = os.environ.get("MCP_HOST", "127.0.0.1")
-    port = int(os.environ.get("MCP_PORT", "8000"))
-    # FastMCP exposes these as settings consumed by its SSE app.
-    mcp.settings.host = host
-    mcp.settings.port = port
-    mcp.run(transport="sse")
+    """Run the MCP server exposing both SSE (/sse) and Streamable HTTP (/mcp)."""
+    import contextlib
+
+    import uvicorn
+    from starlette.applications import Starlette
+
+    sse_app = mcp.sse_app()
+    http_app = mcp.streamable_http_app()
+
+    # Combine the routes of both transport apps into one Starlette app so the
+    # server exposes /sse + /messages/ AND /mcp side-by-side.
+    @contextlib.asynccontextmanager
+    async def lifespan(_app):
+        async with http_app.router.lifespan_context(_app):
+            yield
+
+    app = Starlette(
+        routes=[*sse_app.routes, *http_app.routes],
+        lifespan=lifespan,
+    )
+    uvicorn.run(app, host=_MCP_HOST, port=_MCP_PORT)
 
 
 if __name__ == "__main__":
