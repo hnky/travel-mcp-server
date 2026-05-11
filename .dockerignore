@@ -1,0 +1,16 @@
+# Build artefacts
+__pycache__
+*.pyc
+.venv
+.env
+.git
+.gitignore
+.vscode
+.ruff_cache
+.pytest_cache
+dist
+build
+*.egg-info
+Dockerfile
+.dockerignore
+scripts/azure-deploy.sh

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "contoso-travel"
+version = "0.1.0"
+description = "Contoso Travel MCP server - read-only flight & hotel info backed by Azure Table Storage."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Contoso Travel Demo" }]
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "azure-data-tables>=12.5.0",
+    "pydantic>=2.6.0",
+    "python-dotenv>=1.0.1",
+    "tzdata>=2024.1",
+]
+
+[project.scripts]
+contoso-travel-server = "contoso_travel.server:main"
+contoso-travel-seed = "contoso_travel.seed:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/contoso_travel"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
