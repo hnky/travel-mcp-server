@@ -15,8 +15,9 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import storage
+from . import storage, trips
 from .models import City, Flight, Hotel
+from .trips import Trip, TripCreated
 
 load_dotenv()
 
@@ -236,6 +237,78 @@ def get_current_time(location: str | None = None) -> CurrentTime:
         utc_offset=utc_offset,
         city=city_iata,
     )
+
+
+# ---------------------------------------------------------------------------
+# Trip planning tools
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def create_trip(name: str) -> TripCreated:
+    """Create a new trip itinerary.
+
+    Returns the trip `id` plus a secret `key`. The key MUST be supplied to
+    `add_flight_to_trip` and `add_hotel_to_trip` to mutate this trip.
+    Store the key for the rest of the conversation - it cannot be recovered.
+    """
+    return trips.create_trip(name)
+
+
+@mcp.tool()
+def add_flight_to_trip(
+    trip_id: str,
+    key: str,
+    flight_number: str,
+    departure_date: str,
+) -> Trip:
+    """Append a Contoso flight to an existing trip.
+
+    Args:
+        trip_id: The trip id returned by `create_trip`.
+        key: The secret trip key returned by `create_trip`.
+        flight_number: Contoso flight number (e.g. 'CT012').
+        departure_date: Date of departure at origin (YYYY-MM-DD).
+
+    Returns the full updated trip.
+    """
+    flight = storage.get_flight(flight_number)
+    if flight is None:
+        raise ValueError(f"Unknown flight '{flight_number}'.")
+    return trips.add_flight(trip_id, key, flight, departure_date)
+
+
+@mcp.tool()
+def add_hotel_to_trip(
+    trip_id: str,
+    key: str,
+    hotel_id: str,
+    checkin: str,
+    checkout: str,
+) -> Trip:
+    """Append a Contoso hotel stay to an existing trip.
+
+    Args:
+        trip_id: The trip id returned by `create_trip`.
+        key: The secret trip key returned by `create_trip`.
+        hotel_id: Hotel id (e.g. 'HKG-03').
+        checkin: Check-in date (YYYY-MM-DD).
+        checkout: Check-out date (YYYY-MM-DD), must be after checkin.
+
+    Returns the full updated trip.
+    """
+    hotel = storage.get_hotel(hotel_id)
+    if hotel is None:
+        raise ValueError(f"Unknown hotel '{hotel_id}'.")
+    return trips.add_hotel(trip_id, key, hotel, checkin, checkout)
+
+
+@mcp.tool()
+def get_trip(trip_id: str) -> Trip | None:
+    """Return the current state of a trip (no key required for read).
+
+    Returns null if the trip id is unknown.
+    """
+    return trips.get_trip(trip_id)
 
 
 # ---------------------------------------------------------------------------
