@@ -95,10 +95,20 @@ def _put_record(record: dict) -> None:
 # Webhook
 # ---------------------------------------------------------------------------
 
+def _item_sort_key(item: dict) -> str:
+    if item.get("type") == "flight":
+        return (item.get("flight") or {}).get("departure_date", "")
+    if item.get("type") == "hotel":
+        return (item.get("hotel") or {}).get("checkin", "")
+    return ""
+
+
 def _post_webhook(trip: Trip) -> None:
     if not _WEBHOOK_URL:
         return
-    payload = json.dumps(trip.model_dump()).encode("utf-8")
+    payload_dict = trip.model_dump()
+    payload_dict["items"] = sorted(payload_dict.get("items", []), key=_item_sort_key)
+    payload = json.dumps(payload_dict).encode("utf-8")
     req = urllib.request.Request(
         _WEBHOOK_URL,
         data=payload,
